@@ -22,54 +22,118 @@ iris = load_iris()
 df = pd.DataFrame(data=iris.data, columns=iris.feature_names)
 print(df.iloc[1:10])
 
-# --- SLIDE 9: BINARY LOGISTIC REGRESSION ---
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import datasets
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+# Load Iris dataset
+iris = datasets.load_iris()
+
+# --- SLIDE 9: BINARY LOGISTIC REGRESSION (SCALED) ---
 X = iris.data[:, :2]   # first two features
 y = iris.target
 
 # 2. Create Binary Target: 1 if Virginica (class 2), else 0
 y_binary = (y == 2).astype(int)
 
-# 3. Train/Test Split (30% data used for training)
-X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.3, random_state=42)
+# 3. Train/Validation/Test Split
+# First split: Separate out the Training data (60%) and a temporary remainder (40%)
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X, y_binary, test_size=0.4, random_state=42
+)
 
-# 4. Train Model
-model = LogisticRegression()
+# Second split: Split the remainder (40%) equally into Validation (20%) and Test (20%)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=0.5, random_state=42
+)
+
+print(f"Data Split: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
+
+# 4. Train Model (Using Pipeline for Scaling)
+# The pipeline automatically scales inputs using statistics learned from X_train
+model = make_pipeline(StandardScaler(), LogisticRegression())
 model.fit(X_train, y_train)
 
 # 5. Evaluate
+# A. Check Validation Score
+# The pipeline scales X_val using the mean/std from X_train before predicting
+val_acc = model.score(X_val, y_val)
+print(f"Validation Accuracy: {val_acc:.2f}")
+
+# B. Check Final Test Score
 y_pred = model.predict(X_test)
-print("--- Binary Logistic Regression Results ---")
-print(f"Accuracy: {accuracy_score(y_test, y_pred):.2f}")
+print("--- Binary Logistic Regression Test Results ---")
+print(f"Test Accuracy: {accuracy_score(y_test, y_pred):.2f}")
 print(f"Confusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
 
-# 6. Visualize Decision Boundary (Matches your "Visualizing Logistic Regression" slide)
+# 6. Visualize Decision Boundary
+# Create grid relative to original data range
 x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
 y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
 xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02), np.arange(y_min, y_max, 0.02))
+
+# The pipeline handles scaling the meshgrid points automatically
 Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
 
 plt.figure(figsize=(8, 6))
 plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
 plt.scatter(X[:, 0], X[:, 1], c=y_binary, edgecolors='k', cmap=plt.cm.coolwarm)
+
 plt.xlabel('Sepal length')
 plt.ylabel('Sepal width')
-plt.title('Binary Logistic Regression Decision Boundary')
+plt.title('Binary Logistic Regression Decision Boundary (Scaled)')
 plt.show()
 
-# --- SLIDE 10: MULTINOMIAL LOGISTIC REGRESSION ---
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-# 1. Use the full Iris dataset (3 classes: 0, 1, 2)
-# We use the same X as before, but 'y' is now the original 3 classes
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+# --- SLIDE 10: MULTINOMIAL LOGISTIC REGRESSION (WITH SCALING) ---
 
-# 2. Train Model (Softmax is handled automatically by sklearn when multi_class='multinomial')
-      # Limited-memory Broyden–Fletcher–Goldfarb–Shanno solver
-multi_model = LogisticRegression(multi_class='multinomial', solver='lbfgs')
-multi_model.fit(X_train, y_train)
+# 1. Data Prep (Same Split)
+# 60/40 splot
+X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42)
+# split the 40 into 20/20 for validation and testing
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
-# 3. Visualize
-Z = multi_model.predict(np.c_[xx.ravel(), yy.ravel()])
+# 2. Create a Pipeline
+# The pipeline does two things sequentially:
+#   Step A: Scale data (StandardScaler)
+#   Step B: Train model (LogisticRegression)
+pipeline = make_pipeline(
+    StandardScaler(),
+    LogisticRegression(multi_class='multinomial', solver='lbfgs')
+)
+
+# 3. Train
+# When we call fit(), it calculates the mean/std on X_train ONLY,
+# scales X_train, and then trains the model.
+pipeline.fit(X_train, y_train)
+
+# 4. Evaluate
+# When we call score() or predict(), the pipeline automatically scales
+# X_val/X_test using the mean/std learned from X_train.
+print(f"Validation Accuracy: {pipeline.score(X_val, y_val):.2f}")
+
+y_pred = pipeline.predict(X_test)
+print("--- Multinomial Logistic Regression (Scaled) ---")
+print(f"Test Accuracy: {accuracy_score(y_test, y_pred):.2f}")
+
+
+# 5. Visualize
+# Because we used a Pipeline, we don't need to manually scale the meshgrid (xx, yy).
+# We pass the raw meshgrid points to the pipeline, and it scales them internally.
+x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
+y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02), np.arange(y_min, y_max, 0.02))
+
+Z = pipeline.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
 
 plt.figure(figsize=(8, 6))
@@ -77,206 +141,644 @@ plt.contourf(xx, yy, Z, cmap=plt.cm.viridis, alpha=0.8)
 plt.scatter(X[:, 0], X[:, 1], c=y, edgecolors='k', cmap=plt.cm.viridis)
 plt.xlabel('Sepal length')
 plt.ylabel('Sepal width')
-plt.title('Multinomial Logistic Regression (3 Classes)')
+plt.title('Multinomial Logistic Regression (Scaled Pipeline)')
 plt.show()
 
-# --- SLIDE 11: RANDOM FOREST ---
+# --- SLIDE 11: RANDOM FOREST + TUNING ---
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import datasets
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
-# 1. Train Model (Ensemble of Trees)
-rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
-rf_model.fit(X_train, y_train)
+# Load Iris dataset
+iris = datasets.load_iris()
+X = iris.data[:, :2]  # first two features
+y = iris.target
 
-# 2. Visualize (Notice the non-linear, "blocky" boundaries)
-Z = rf_model.predict(np.c_[xx.ravel(), yy.ravel()])
+# 1. Train/Validation/Test Split (60/20/20)
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X, y, test_size=0.4, random_state=42
+)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=0.5, random_state=42
+)
+
+# 2. Hyperparameter Grid
+depths_to_try = [1, 5, 10, None]
+trees_to_try = [10, 50, 100]
+
+best_score = 0
+best_params = {}
+best_model = None
+
+print(f"{'Depth':<10} | {'Trees':<10} | {'Val Acc':<10}")
+print("-" * 35)
+
+# 3. Nested Loop (Grid Search)
+for depth in depths_to_try:
+    for trees in trees_to_try:
+        # Create Pipeline
+        current_model = make_pipeline(
+            StandardScaler(),
+            RandomForestClassifier(n_estimators=trees, max_depth=depth, random_state=42)
+        )
+
+        # Train on TRAIN
+        current_model.fit(X_train, y_train)
+
+        # Evaluate on VALIDATION
+        val_score = current_model.score(X_val, y_val)
+
+        # Print row
+        d_str = str(depth) if depth else "None"
+        print(f"{d_str:<10} | {trees:<10} | {val_score:.2f}")
+
+        # Check if best
+        if val_score > best_score:
+            best_score = val_score
+            best_params = {'depth': depth, 'trees': trees}
+            best_model = current_model
+
+print("-" * 35)
+print(f"Best Params: Depth={best_params['depth']}, Trees={best_params['trees']}")
+print(f"Best Validation Accuracy: {best_score:.2f}")
+
+# 4. Final Evaluation on TEST set
+y_pred = best_model.predict(X_test)
+print("\n--- Final Test Results ---")
+print(f"Test Accuracy: {accuracy_score(y_test, y_pred):.2f}")
+
+# 5. Visualize Decision Boundary (Best Model)
+x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
+y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02), np.arange(y_min, y_max, 0.02))
+
+Z = best_model.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
 
 plt.figure(figsize=(8, 6))
 plt.contourf(xx, yy, Z, cmap=plt.cm.viridis, alpha=0.8)
 plt.scatter(X[:, 0], X[:, 1], c=y, edgecolors='k', cmap=plt.cm.viridis)
-plt.title('Random Forest Decision Boundary (Non-Linear)')
+plt.title(f'Random Forest (Depth={best_params["depth"]}, Trees={best_params["trees"]})')
 plt.show()
 
-# --- Slide 12 & 13 Neural Network Perperation: Imports & Scaling ---
+# --- SLIDE 11: NN + TUNING (BINARY OUTPUT) ---
 
-# Note: We are using the Keras API, which is my preferred method
-# I find it easier to understand than others
-# The HUGE downside, is that it requires tensorflow. Tensorflow is
-# a fantastic tool for deep learning but it is computationally expensive
-# and breaks easily
-
+import numpy as np
+import matplotlib.pyplot as plt
 import tensorflow as tf
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Input
 from tensorflow.keras.optimizers import Adam
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import logging
+tf.get_logger().setLevel(logging.ERROR) # Suppress TF warnings for cleaner output
 
-# Neural Networks REQUIRE scaling!
-scaler = StandardScaler() # Z-score scaling (Many others exist)
-X = iris.data[:, :2]  # Use only first two features (Sepal Length, Sepal Width) for easy plotting
-X_scaled = scaler.fit_transform(X)
-print("--- Raw Data ---")
-print(X[1:10])
-print("--- Scaled Data ---")
-print(X_scaled[1:10])
+# --- LOAD DATA ---
+iris = datasets.load_iris()
+X = iris.data[:, :2]   # First two features
+y = iris.target
 
-# --- SCENARIO A: BINARY CLASSIFICATION (Virginica vs. Others) ---
-
-# 1. Prepare Labels (0 or 1)
+# Create Binary Target: 1 if Virginica (class 2), else 0
 y_binary = (y == 2).astype(int)
 
-# 2. Build Model
-model_binary = Sequential([
-    # Tells the network the number of features in the dataset
-    Input(shape=(2,)),
-    # Hidden Layer (Learn patterns)
-    # We a priori use 10 neurons in this layer. You can tune for this
-    # We also only use 1 layer. You can tune for this
-    Dense(10, activation='relu'),
-    # Output Layer (Binary Decision)
-    # Activation='sigmoid' maps the output to bebetween 0 and 1
-    Dense(1, activation='sigmoid')
-])
+# --- 1. TRAIN / VALIDATION / TEST SPLIT (60/20/20) ---
+# Split 1: Train (60%) vs Temp (40%)
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X, y_binary, test_size=0.4, random_state=42
+)
+# Split 2: Temp -> Val (20%) vs Test (20%)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=0.5, random_state=42
+)
 
-# 3. Compile (Loss = Binary Crossentropy)
-model_binary.compile(optimizer=Adam(learning_rate=0.1),
-                     loss='binary_crossentropy',
-                     metrics=['accuracy'])
+print(f"Split Sizes: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
 
-# 4. Train
-print("--- Training Binary NN ---")
-model_binary.fit(X_scaled, y_binary, epochs=50, verbose=0)
-print("Training Complete.")
+# --- 2. SCALING ---
+# Fit on TRAIN only
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
 
-# 5. Visualize Decision Boundary
+# Transform VAL and TEST using Train statistics scaler
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+
+# --- 3. TUNING LOOP (Number of Hidden Layers) ---
+layers_to_try = [1, 2, 3, 4, 5] # We will try networks with 1-5 hidden layers
+neurons_fixed = 10        # We assume width is fixed
+
+best_val_acc = 0
+best_layers = 0
+best_model = None
+
+print("\n--- Starting Hyperparameter Tuning ---")
+
+for n_layers in layers_to_try:
+    # A. Build Model
+    model = Sequential()
+    model.add(Input(shape=(2,)))
+
+    # Add 'n' hidden layers
+    for _ in range(n_layers):
+        model.add(Dense(neurons_fixed, activation='relu'))
+
+    # Output Layer
+    model.add(Dense(1, activation='sigmoid'))
+
+    # B. Compile
+    model.compile(optimizer=Adam(learning_rate=0.01),
+                  loss='binary_crossentropy',
+                  metrics=['accuracy'])
+
+    # C. Train (on Scaled Train Data)
+    # verbose=0 keeps the output clean
+    model.fit(X_train_scaled, y_train, epochs=50, verbose=0)
+
+    # D. Evaluate (on Scaled Validation Data)
+    loss, val_acc = model.evaluate(X_val_scaled, y_val, verbose=0)
+
+    print(f"Layers: {n_layers} | Validation Accuracy: {val_acc:.2f}")
+
+    # E. Save Best
+    if val_acc >= best_val_acc:
+        best_val_acc = val_acc
+        best_layers = n_layers
+        best_model = model
+
+print("-" * 30)
+print(f"Best Configuration: {best_layers} Hidden Layers (Val Acc: {best_val_acc:.2f})")
+
+
+# --- 4. FINAL TEST ---
+# Evaluate the winner on the Test set
+test_loss, test_acc = best_model.evaluate(X_test_scaled, y_test, verbose=0)
+print(f"\n--- Final Test Results ---")
+print(f"Test Accuracy: {test_acc:.2f}")
+
+
+# --- 5. VISUALIZE DECISION BOUNDARY ---
 def plot_keras_boundary(model, X, y, title):
-    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
-    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    # Determine grid range based on the SCALED data
+    x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
+    y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02),
+                         np.arange(y_min, y_max, 0.02))
+
+    # Predict
+    Z = model.predict(np.c_[xx.ravel(), yy.ravel()], verbose=0)
+    Z = (Z > 0.5).astype(int)
+    Z = Z.reshape(xx.shape)
+
+    plt.figure(figsize=(8, 6))
+    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.3)
+    # Plot the SCALED data points
+    plt.scatter(X[:, 0], X[:, 1], c=y, edgecolors='k', cmap=plt.cm.coolwarm)
+    plt.title(title)
+    plt.xlabel('Scaled Sepal Length')
+    plt.ylabel('Scaled Sepal Width')
+    plt.show()
+
+plot_keras_boundary(best_model, X_test_scaled, y_test,
+                   f"Neural Network Boundary ({best_layers} Layers)")
+
+# --- SCENARIO B: MULTI-CLASS (Setosa vs Versicolor vs Virginica) ---
+
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.optimizers import Adam
+import logging
+# Suppress TF warnings for cleaner output
+tf.get_logger().setLevel(logging.ERROR)
+
+# --- LOAD DATA ---
+iris = datasets.load_iris()
+X = iris.data[:, :2]   # First two features
+y = iris.target        # 3 classes: 0, 1, 2
+
+# --- 1. TRAIN / VALIDATION / TEST SPLIT (60/20/20) ---
+# Split 1: Train (60%) vs Temp (40%)
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X, y, test_size=0.4, random_state=42
+)
+
+# Split 2: Temp -> Val (20%) vs Test (20%)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=0.5, random_state=42
+)
+
+print(f"Split Sizes: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
+
+# --- 2. SCALING ---
+# Fit Scaler on TRAIN only
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+# Transform VAL and TEST using Train statistics
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+# --- 3. TUNING LOOP (Hidden Layers) ---
+layers_to_try = [1, 2, 3, 4, 5]
+neurons_fixed = 16  # Slightly wider fixed layer for multi-class
+
+best_val_acc = 0
+best_layers = 0
+best_model = None
+
+print("\n--- Starting Multi-Class Tuning ---")
+
+for n_layers in layers_to_try:
+    # A. Build Model
+    model = Sequential()
+    model.add(Input(shape=(2,)))
+
+    # Add Hidden Layers dynamically
+    for _ in range(n_layers):
+        model.add(Dense(neurons_fixed, activation='relu'))
+
+    # Output Layer: 3 Nodes (Softmax = Probabilities sum to 1)
+    model.add(Dense(3, activation='softmax'))
+
+    # B. Compile
+    # loss='sparse_categorical_crossentropy' handles integer labels (0, 1, 2) automatically
+    model.compile(optimizer=Adam(learning_rate=0.01),
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+
+    # C. Train (on Scaled Train Data)
+    model.fit(X_train_scaled, y_train, epochs=50, verbose=0)
+
+    # D. Evaluate (on Scaled Validation Data)
+    loss, val_acc = model.evaluate(X_val_scaled, y_val, verbose=0)
+
+    print(f"Layers: {n_layers} | Validation Accuracy: {val_acc:.2f}")
+
+    # E. Save Best
+    if val_acc >= best_val_acc:
+        best_val_acc = val_acc
+        best_layers = n_layers
+        best_model = model
+
+print("-" * 35)
+print(f"Best Config: {best_layers} Layers (Val Acc: {best_val_acc:.2f})")
+
+# --- 4. FINAL TEST ---
+# Evaluate the winner on the Test set
+test_loss, test_acc = best_model.evaluate(X_test_scaled, y_test, verbose=0)
+print(f"\n--- Final Test Results ---")
+print(f"Test Accuracy: {test_acc:.2f}")
+
+# --- 5. VISUALIZE DECISION BOUNDARY ---
+def plot_multiclass_boundary(model, X, y, title):
+    # Determine grid range based on the SCALED data
+    x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
+    y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
     xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02),
                          np.arange(y_min, y_max, 0.02))
 
     # Predict probabilities
     Z = model.predict(np.c_[xx.ravel(), yy.ravel()], verbose=0)
 
-    # Apply Threshold (0.5) if binary, or argmax if multi-class
-    if Z.shape[1] == 1:
-        Z = (Z > 0.5).astype(int)
-    else:
-        Z = np.argmax(Z, axis=1)
+    # Convert probabilities to class labels (0, 1, or 2)
+    Z = np.argmax(Z, axis=1)
 
     Z = Z.reshape(xx.shape)
 
     plt.figure(figsize=(8, 6))
-    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.3)
-    plt.scatter(X[:, 0], X[:, 1], c=y, edgecolors='k', cmap=plt.cm.coolwarm)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.viridis, alpha=0.3)
+    plt.scatter(X[:, 0], X[:, 1], c=y, edgecolors='k', cmap=plt.cm.viridis)
     plt.title(title)
+    plt.xlabel('Scaled Sepal Length')
+    plt.ylabel('Scaled Sepal Width')
     plt.show()
 
-plot_keras_boundary(model_binary, X_scaled, y_binary, "Binary NN (Sigmoid Output)")
-
-# --- SCENARIO B: MULTI-CLASS (Setosa vs Versicolor vs Virginica) ---
-
-# 1. Build Model
-model_multiclass = Sequential([
-    Input(shape=(2,)),
-    Dense(10, activation='relu'),
-    # Output Layer: 3 Nodes (Softmax = Probabilities sum to 1)
-    Dense(3, activation='softmax')
-])
-# 2. Compile
-model_multiclass.compile(optimizer=Adam(learning_rate=0.1),
-                         loss='sparse_categorical_crossentropy',
-                         metrics=['accuracy'])
-# 3. Train
-print("\n--- Training Multi-Class NN ---")
-model_multiclass.fit(X_scaled, y, epochs=50, verbose=0)
-print("Training Complete.")
-# 4. Visualize
-plot_keras_boundary(model_multiclass, X_scaled, y, "Multi-Class NN (Softmax Output)")
+plot_multiclass_boundary(best_model, X_test_scaled, y_test,
+                         f"Multi-Class NN ({best_layers} Hidden Layers)")
 
 # --- SCENARIO C: MULTI-LABEL (Independent Sigmoids) ---
-
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
 from sklearn.datasets import make_multilabel_classification
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.optimizers import Adam
+import logging
+# Suppress TF warnings
+tf.get_logger().setLevel(logging.ERROR)
 
-# 1. Create Dummy Multi-Label Data
+# --- 1. DATA GENERATION ---
+# Create Dummy Multi-Label Data (1000 samples, 2 features, 3 possible labels)
+# Note: 'n_labels' is the average number of labels per instance
 X_multi, y_multi = make_multilabel_classification(n_samples=1000, n_features=2,
                                                   n_classes=3, n_labels=2, random_state=42)
-X_multi_scaled = scaler.fit_transform(X_multi)
 
-# 2. Build Model
-model_multilabel = Sequential([
-    Input(shape=(2,)),
-    Dense(10, activation='relu'),
-    # Output Layer: 3 independent Nodes with sigmoid
-    # Allows multiple labels to be true simultaneously (e.g., [1, 0, 1])
-    Dense(3, activation='sigmoid')
-])
-# 3. Compile (Binary Crossentropy treats each output as an independent)
-model_multilabel.compile(optimizer='adam',
-                         loss='binary_crossentropy',
-                         metrics=['accuracy'])
-# 4. Train
-print("\n--- Training Multi-Label NN ---")
-model_multilabel.fit(X_multi_scaled, y_multi, epochs=20, verbose=0)
-# 5. Inspection
-print("\n--- Multi-Label Predictions (First 3 samples) ---")
-predictions = model_multilabel.predict(X_multi_scaled[:3])
-for i, pred in enumerate(predictions):
+# --- 2. TRAIN / VALIDATION / TEST SPLIT (60/20/20) ---
+# Split 1: Train (60%) vs Temp (40%)
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X_multi, y_multi, test_size=0.4, random_state=42
+)
+# Split 2: Temp -> Val (20%) vs Test (20%)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=0.5, random_state=42
+)
+
+print(f"Data Split: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
+
+# --- 3. SCALING ---
+# Fit Scaler on TRAIN only
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+# Transform VAL and TEST using Train statistics
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+# --- 4. TUNING LOOP (Hidden Layers) ---
+layers_to_try = [1, 2, 3, 4, 5]
+neurons_fixed = 16
+
+best_val_acc = 0
+best_layers = 0
+best_model = None
+
+print("\n--- Starting Multi-Label Tuning ---")
+
+for n_layers in layers_to_try:
+    # A. Build Model
+    model = Sequential()
+    model.add(Input(shape=(2,)))
+
+    # Add Hidden Layers dynamically
+    for _ in range(n_layers):
+        model.add(Dense(neurons_fixed, activation='relu'))
+
+    # Output Layer: 3 independent Sigmoid nodes
+    # Unlike Softmax (which sums to 1), Sigmoid outputs are independent (0 to 1 each)
+    model.add(Dense(3, activation='sigmoid'))
+
+    # B. Compile
+    # Binary Crossentropy treats the problem as 3 separate binary tasks
+    model.compile(optimizer='adam',
+                  loss='binary_crossentropy',
+                  metrics=['binary_accuracy']) # 'binary_accuracy' is explicit for multi-label
+
+    # C. Train (on Scaled Train Data)
+    model.fit(X_train_scaled, y_train, epochs=30, verbose=0)
+
+    # D. Evaluate (on Scaled Validation Data)
+    loss, val_acc = model.evaluate(X_val_scaled, y_val, verbose=0)
+
+    print(f"Layers: {n_layers} | Validation Accuracy: {val_acc:.2f}")
+
+    # E. Save Best
+    if val_acc >= best_val_acc:
+        best_val_acc = val_acc
+        best_layers = n_layers
+        best_model = model
+
+print("-" * 35)
+print(f"Best Config: {best_layers} Layers (Val Acc: {best_val_acc:.2f})")
+
+# --- 5. FINAL TEST & INSPECTION ---
+print("\n--- Final Test Predictions (First 3 samples) ---")
+# Predict on Test Set
+predictions = best_model.predict(X_test_scaled)
+
+for i in range(3):
     print(f"Sample {i+1}:")
-    print(f"   Probabilities: {pred.round(2)}")
-    # Threshold at 0.5 to decide 'True' or 'False' for each label
-    print(f"   Predicted Labels: {(pred > 0.5).astype(int)}")
-    print(f"   Actual Labels:    {y_multi[i]}")
+    print(f"   Probabilities: {predictions[i].round(2)}")
+    print(f"   Predicted:     {(predictions[i] > 0.5).astype(int)}")
+    print(f"   Actual:        {y_test[i]}")
     print("-" * 30)
 
-# --- SLIDE 15: K-MEANS CLUSTERING ---
+# --- 6. VISUALIZE DECISION BOUNDARIES (Per Label) ---
+# Since labels can overlap, we plot the boundary for Label 0, Label 1, and Label 2 separately
+def plot_multilabel_boundaries(model, X, y, n_classes):
+    x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
+    y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02),
+                         np.arange(y_min, y_max, 0.02))
+
+    # Get predictions for the entire grid
+    Z_all = model.predict(np.c_[xx.ravel(), yy.ravel()], verbose=0)
+
+    fig, axes = plt.subplots(1, n_classes, figsize=(15, 4))
+
+    for i in range(n_classes):
+        ax = axes[i]
+
+        # Isolate the prediction for label 'i'
+        Z = Z_all[:, i]
+        Z = (Z > 0.5).astype(int)
+        Z = Z.reshape(xx.shape)
+
+        # Plot contour for label 'i'
+        ax.contourf(xx, yy, Z, cmap=plt.cm.Blues, alpha=0.3)
+
+        # Scatter points: Blue if they HAVE the label, Grey if they DON'T
+        colors = ['blue' if label == 1 else 'lightgrey' for label in y[:, i]]
+        ax.scatter(X[:, 0], X[:, 1], c=colors, edgecolors='k', s=20)
+
+        ax.set_title(f"Decision Boundary: Label {i}")
+        ax.set_xlabel("Scaled Feature 1")
+        if i == 0: ax.set_ylabel("Scaled Feature 2")
+
+    plt.tight_layout()
+    plt.show()
+
+plot_multilabel_boundaries(best_model, X_test_scaled, y_test, n_classes=3)
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import datasets
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
-# 1. Train Model
-# Note: We do NOT provide 'y' (labels) to fit()
-# We assume 3 clusters. You can tune for this
-kmeans = KMeans(n_clusters=3, random_state=42)
-kmeans.fit(X) # X contains only features
+# --- SLIDE 15: K-MEANS CLUSTERING ---
 
-# 2. Get Cluster Labels
-predicted_clusters = kmeans.labels_
+# Load Iris
+iris = datasets.load_iris()
+X = iris.data[:, :2]   # First two features
+y = iris.target        # Ground Truth Labels (0=Setosa, 1=Versicolor, 2=Virginica)
 
-# 3. Visualize Clusters
-plt.figure(figsize=(8, 6))
-plt.scatter(X[:, 0], X[:, 1], c=predicted_clusters, cmap='viridis', edgecolors='k')
-plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=300, c='red', marker='X', label='Centroids')
-plt.title('K-Means Clustering (No Labels Used)')
-plt.legend()
+# 1. Train/Validation/Test Split (Carrying 'y' along for the final plot)
+#    Note: We still won't use 'y' for training, only for visualization.
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X, y, test_size=0.4, random_state=42
+)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=0.5, random_state=42
+)
+
+print(f"Data Split: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
+
+# 2. Scaling (Crucial for Distance-Based Algorithms)
+#    Fit on TRAIN, Transform Val/Test
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+# 3. Tuning Loop (Find Best K using Silhouette Score on Validation)
+#    We are looking for the "natural" clustering structure without peeking at labels.
+k_values = range(2, 6)
+best_k = 0
+best_score = -1
+best_model = None
+
+print("\n--- Tuning K (Unsupervised) ---")
+for k in k_values:
+    # Train
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans.fit(X_train_scaled)
+
+    # Evaluate on Validation (using Silhouette, NOT accuracy)
+    val_labels = kmeans.predict(X_val_scaled)
+    score = silhouette_score(X_val_scaled, val_labels)
+
+    print(f"K={k} | Validation Silhouette Score: {score:.3f}")
+
+    if score > best_score:
+        best_score = score
+        best_k = k
+        best_model = kmeans
+
+print("-" * 40)
+print(f"Best K found: {best_k}")
+
+
+# 4. Visualize: Ground Truth vs. Learned Centroids
+#    We plot the Test data colored by their ACTUAL SPECIES (y_test).
+#    We overlay the CENTROIDS learned by K-Means.
+
+plt.figure(figsize=(10, 6))
+
+# A. Plot Data Points (Colored by TRUTH)
+scatter = plt.scatter(X_test_scaled[:, 0], X_test_scaled[:, 1],
+                      c=y_test, cmap='viridis', edgecolors='k', s=50, alpha=0.8)
+
+# B. Plot Centroids (Learned by Model)
+#    These are the "centers" the algorithm found purely from math/distances.
+plt.scatter(best_model.cluster_centers_[:, 0], best_model.cluster_centers_[:, 1],
+            s=300, c='red', marker='X', label='Learned Centroids', edgecolors='white', linewidth=2)
+
+plt.title(f'Comparison: True Species (Colors) vs. Learned Clusters (Red X)\nBest K={best_k}')
+plt.xlabel('Scaled Sepal Length')
+plt.ylabel('Scaled Sepal Width')
+
+# Create a custom legend for the species
+legend1 = plt.legend(*scatter.legend_elements(), title="True Species", loc="upper right")
+plt.gca().add_artist(legend1)
+plt.legend(loc="lower right") # Legend for the Centroids
+
 plt.show()
 
-# --- SLIDE 15: HIERARCHICAL CLUSTERING & DENDROGRAMS ---
+import numpy as np
+import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage
+from sklearn import datasets
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
-# 1. Compute Linkage Matrix
-# 'ward' minimizes the variance of the clusters being merged
-linked = linkage(X, method='ward')
+# --- SLIDE 15: HIERARCHICAL CLUSTERING  ---
 
-# 2. Plot Dendrogram
-plt.figure(figsize=(10, 7))
+# Load Iris
+iris = datasets.load_iris()
+X = iris.data[:, :2]  # First two features
+
+# 1. Train/Validation/Test Split (60/20/20)
+X_train, X_temp = train_test_split(X, test_size=0.4, random_state=42)
+X_val, X_test = train_test_split(X_temp, test_size=0.5, random_state=42)
+
+print(f"Data Split: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
+
+# 2. Scaling
+# We must scale because 'ward' linkage minimizes variance (Euclidean distance based)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+
+# --- PHASE A: VISUAL TUNING (DENDROGRAM) ---
+# We use the Training set to visualize the hierarchy
+print("\nGenerating Dendrogram on Training Data...")
+linked = linkage(X_train_scaled, method='ward')
+
+plt.figure(figsize=(10, 5))
 dendrogram(linked,
            orientation='top',
            distance_sort='descending',
            show_leaf_counts=True)
-plt.title('Hierarchical Clustering Dendrogram')
+plt.title('Dendrogram (Training Data)')
 plt.xlabel('Sample Index')
 plt.ylabel('Distance (Ward)')
 plt.show()
 
-# 3. Agglomerative Clustering (Getting Labels)
-# If we look at the dendrogram and decide on 3 clusters:
-cluster = AgglomerativeClustering(n_clusters=3, metric='euclidean', linkage='ward')
-cluster_labels = cluster.fit_predict(X)
 
-# 4. Visualize the Clusters
+# --- PHASE B: AUTOMATED TUNING (VALIDATION) ---
+# We test different Cluster Counts (K) on the VALIDATION set
+k_values = range(2, 6)
+best_k = 0
+best_score = -1
+
+print("--- Tuning Number of Clusters (on Validation Set) ---")
+for k in k_values:
+    # Note: AgglomerativeClustering doesn't have a 'predict' method.
+    # We fit_predict strictly on the current vaidation dataset (X_val_scaled).
+    model = AgglomerativeClustering(n_clusters=k, metric='euclidean', linkage='ward')
+    val_labels = model.fit_predict(X_val_scaled)
+
+    # Calculate Silhouette Score
+    score = silhouette_score(X_val_scaled, val_labels)
+    print(f"K={k} | Validation Silhouette Score: {score:.3f}")
+
+    if score > best_score:
+        best_score = score
+        best_k = k
+
+print("-" * 40)
+print(f"Best K found: {best_k} (Score: {best_score:.3f})")
+
+
+# --- PHASE C: FINAL EVALUATION (TEST) ---
+# Now we apply the WINNING K to the TEST set to see if the structure holds.
+print(f"\nApplying Best K ({best_k}) to Test Set...")
+
+final_model = AgglomerativeClustering(n_clusters=best_k, metric='euclidean', linkage='ward')
+test_labels = final_model.fit_predict(X_test_scaled)
+
+# Calculate Final Score
+test_score = silhouette_score(X_test_scaled, test_labels)
+print(f"Test Silhouette Score: {test_score:.3f}")
+
+
+# --- PHASE D: VISUALIZE FINAL CLUSTERS ---
 plt.figure(figsize=(8, 6))
-plt.scatter(X[:, 0], X[:, 1], c=cluster_labels, cmap='rainbow', edgecolors='k')
-plt.title('Hierarchical Clustering (Agglomerative)')
-plt.xlabel('Sepal length')
-plt.ylabel('Sepal width')
+plt.scatter(X_test_scaled[:, 0], X_test_scaled[:, 1], c=test_labels,
+            cmap='rainbow', edgecolors='k', s=50)
+
+plt.title(f'Hierarchical Clustering on Test Data (K={best_k})')
+plt.xlabel('Scaled Sepal length')
+plt.ylabel('Scaled Sepal width')
 plt.show()
